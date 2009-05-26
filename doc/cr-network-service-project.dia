@@ -937,7 +937,7 @@
         <dia:point val="21.6005,5.9"/>
       </dia:attribute>
       <dia:attribute name="obj_bb">
-        <dia:rectangle val="21.5505,5.1425;28.9997,7.5"/>
+        <dia:rectangle val="21.5505,5.05;28.9997,7.5"/>
       </dia:attribute>
       <dia:attribute name="orth_points">
         <dia:point val="21.6005,5.9"/>
