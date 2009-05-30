@@ -28,10 +28,19 @@
  */
 package pl.graniec.coralreef.network.services;
 
+import java.io.NotSerializableException;
+import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 
+import pl.graniec.coralreef.network.PacketListener;
+import pl.graniec.coralreef.network.exceptions.NetworkException;
+import pl.graniec.coralreef.network.server.ConnectionListener;
+import pl.graniec.coralreef.network.server.RemoteClient;
 import pl.graniec.coralreef.network.server.Server;
+import pl.graniec.coralreef.network.services.packets.ServiceListingPacket;
+import pl.graniec.coralreef.network.services.packets.ServiceListingRequestPacket;
+import pl.graniec.coralreef.network.services.packets.ServicePacket;
 
 /**
  * The ServiceServer class can provide multiple CoralReef
@@ -58,7 +67,90 @@ public class ServiceServer {
 	 * <code>serverImplementation</code>.
 	 */
 	public ServiceServer(Server serverImplementation) {
-		serverImpl = serverImplementation;
+			serverImpl = serverImplementation;
+			
+			serverImpl.addConnectionListener(new ConnectionListener() {
+				public void clientConnected(RemoteClient client) {
+					handleClientConnected(client);
+				}
+				
+				public void clientDisconnected(RemoteClient client, int reason, String reasonString) {
+					handleClientDisconnected(client, reason, reasonString);
+				}
+			});
+	}
+	
+	private void handleClientConnected(final RemoteClient client) {
+		client.addPacketListener(new PacketListener() {
+			public void packetReceived(Object data) {
+				handlePacketReceived(client, data);
+			}
+		});
+	}
+	
+	private void handlePacketReceived(RemoteClient sender, Object data) {
+		if (!(data instanceof ServicePacket)) {
+			return;
+		}
+		
+		if (data instanceof ServiceListingRequestPacket) {
+			handleServiceListingRequestPacket(sender, (ServiceListingRequestPacket) data);
+		}
+	}
+	
+	/**
+	 * Sends back the service listing information.
+	 * 
+	 * @param data
+	 */
+	private void handleServiceListingRequestPacket(RemoteClient sender, ServiceListingRequestPacket data) {
+		
+		try {
+			
+			int[] ids;
+			
+			synchronized (services) {
+				ids = new int[services.size()];
+				
+				Service service;
+				int counter = 0;
+				for (Iterator itor = services.iterator(); itor.hasNext(); ) {
+					service = (Service) itor.next();
+					ids[counter++] = service.getId();
+				}
+			}
+			
+			ServicePacket packet = new ServiceListingPacket(ids);
+		
+			sender.send(packet);
+			
+		} catch (NotSerializableException e) {
+			// not possible
+		} catch (NetworkException e) {
+			// ignore
+		}
+	}
+
+	private void handleClientDisconnected(RemoteClient client, int reason, String reasonString) {
+		
+	}
+	
+	/**
+	 * Creates a new service that is bound to this server.
+	 * <p>
+	 * A service should be used as regular {@link Server} implementation for
+	 * Coral Reef network applications.
+	 * 
+	 * @return New service (a Server implementation)
+	 */
+	public Service newService(int id) {
+		final Service service = new Service(this, id);
+		
+		synchronized (services) {
+			services.add(service);
+		}
+		
+		return service;
 	}
 	
 	
