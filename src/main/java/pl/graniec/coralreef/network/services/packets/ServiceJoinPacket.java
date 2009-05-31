@@ -43,6 +43,10 @@ public class ServiceJoinPacket implements ServicePacket {
 
 	private int[] services;
 	
+	/** no-arg public constructor for Externalizable interface */
+	public ServiceJoinPacket() {
+	}
+	
 	public ServiceJoinPacket(int[] services) {
 		this.services = services;
 	}
