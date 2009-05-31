@@ -33,42 +33,25 @@ import java.io.ObjectInput;
 import java.io.ObjectOutput;
 
 /**
- * Service server response to {@link ServiceListingRequestPacket}.
- * It contains all required information to identify what services
- * are running on current service server.
+ * Packets sent from client to server when client want to join
+ * selected services.
  * 
  * @author Piotr Korzuszek <piotr.korzuszek@gmail.com>
  *
  */
-public class ServiceListingPacket implements ServicePacket {
+public class ServiceJoinPacket implements ServicePacket {
 
-	/** Array of service identificators */
 	private int[] services;
 	
-	/** Public no-arg construction needed for custom serialization */
-	public ServiceListingPacket() {
-	}
-	
-	public ServiceListingPacket(int[] services) {
+	public ServiceJoinPacket(int[] services) {
 		this.services = services;
 	}
-	
-	/**
-	 * Provides array of identificators what services are running
-	 * on the service server.
-	 * 
-	 * @return the services
-	 */
-	public int[] getServices() {
-		return services;
-	}
-	
+
 	/* (non-Javadoc)
 	 * @see java.io.Externalizable#readExternal(java.io.ObjectInput)
 	 */
 	public void readExternal(ObjectInput in) throws IOException, ClassNotFoundException {
 		services = (int[]) in.readObject();
-
 	}
 
 	/* (non-Javadoc)
@@ -76,6 +59,13 @@ public class ServiceListingPacket implements ServicePacket {
 	 */
 	public void writeExternal(ObjectOutput out) throws IOException {
 		out.writeObject(services);
+	}
+	
+	/**
+	 * @return the services
+	 */
+	public int[] getServices() {
+		return services;
 	}
 
 }

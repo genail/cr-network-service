@@ -43,6 +43,14 @@
             <scope>test</scope>
         </dependency>
         
+        <!-- Network Stream for testing purposes -->
+        <dependency>
+            <groupId>pl.graniec</groupId>
+            <artifactId>cr-network-stream</artifactId>
+            <version>0.2</version>
+            <scope>test</scope>
+        </dependency>
+        
     </dependencies>
     
     <build>

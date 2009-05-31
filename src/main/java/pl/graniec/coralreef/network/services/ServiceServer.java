@@ -29,9 +29,11 @@
 package pl.graniec.coralreef.network.services;
 
 import java.io.NotSerializableException;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Map;
 
 import pl.graniec.coralreef.network.PacketListener;
 import pl.graniec.coralreef.network.exceptions.NetworkException;
@@ -56,11 +58,26 @@ import pl.graniec.coralreef.network.services.packets.ServicePacket;
  *
  */
 public class ServiceServer {
+	
+	private static class ClientHandler {
+		/** Instance to RemoteClient object */
+		RemoteClient remoteClient;
+		/** Services that this client has joined */
+		List/*<Service>*/ services = new LinkedList();
+		
+		public ClientHandler(RemoteClient remoteClient) {
+			super();
+			this.remoteClient = remoteClient;
+		}
+		
+	}
 
 	/** Server implementation */
 	private final Server serverImpl;
 	/** List of available services */
 	private List services = new LinkedList();
+	/** Map of client handlers */
+	private final Map/*<RemoteClient, ClientHandler>*/ clients = new HashMap();
 	
 	/**
 	 * Creates a service server that will run on specified
@@ -80,12 +97,20 @@ public class ServiceServer {
 			});
 	}
 	
+	public void close() {
+		serverImpl.close();
+	}
+	
 	private void handleClientConnected(final RemoteClient client) {
 		client.addPacketListener(new PacketListener() {
 			public void packetReceived(Object data) {
 				handlePacketReceived(client, data);
 			}
 		});
+	}
+	
+	private void handleClientDisconnected(RemoteClient client, int reason, String reasonString) {
+		
 	}
 	
 	private void handlePacketReceived(RemoteClient sender, Object data) {
@@ -121,7 +146,7 @@ public class ServiceServer {
 			}
 			
 			ServicePacket packet = new ServiceListingPacket(ids);
-		
+			
 			sender.send(packet);
 			
 		} catch (NotSerializableException e) {
@@ -130,11 +155,11 @@ public class ServiceServer {
 			// ignore
 		}
 	}
-
-	private void handleClientDisconnected(RemoteClient client, int reason, String reasonString) {
-		
-	}
 	
+	public int getPort() {
+		return serverImpl.getPort();
+	}
+
 	/**
 	 * Creates a new service that is bound to this server.
 	 * <p>
@@ -151,6 +176,10 @@ public class ServiceServer {
 		}
 		
 		return service;
+	}
+	
+	public void open(int port) throws NetworkException {
+		serverImpl.open(port);
 	}
 	
 	
