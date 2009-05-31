@@ -32,6 +32,8 @@ import java.io.NotSerializableException;
 
 import pl.graniec.coralreef.network.PacketListener;
 import pl.graniec.coralreef.network.exceptions.NetworkException;
+import pl.graniec.coralreef.network.services.packets.ServiceJoinPacket;
+import pl.graniec.coralreef.network.services.packets.ServiceJoinResponsePacket;
 import pl.graniec.coralreef.network.services.packets.ServiceListingPacket;
 import pl.graniec.coralreef.network.services.packets.ServiceListingRequestPacket;
 import pl.graniec.coralreef.network.stream.client.StreamClient;
@@ -104,6 +106,32 @@ public class ServiceServerTest extends TestCase {
 		client.connect("127.0.0.1", serviceServer.getPort());
 		
 		client.send(new ServiceListingRequestPacket());
+		
+		Thread.sleep(50);
+		
+		assertTrue(gotPacket);
+	}
+	
+	/** One service, proper join */
+	public void testServiceJoining1() throws NetworkException, NotSerializableException, InterruptedException {
+		
+		serviceServer.newService(10);
+		
+		StreamClient client = new StreamClient();
+		
+		client.addPacketListener(new PacketListener(){
+			public void packetReceived(Object data) {
+				assertTrue(data instanceof ServiceJoinResponsePacket);
+				assertEquals(1, ((ServiceJoinResponsePacket)data).getServicesJoined().length);
+				assertEquals(10, ((ServiceJoinResponsePacket)data).getServicesJoined()[0]);
+				gotPacket = true;
+			}
+		});
+		
+		client.connect("127.0.0.1", serviceServer.getPort());
+		
+		client.send(new ServiceJoinPacket(new int[] {10}));
+		client.send(new ServiceJoinPacket(new int[] {10}));
 		
 		Thread.sleep(50);
 		

@@ -33,6 +33,7 @@ import java.util.Set;
 
 import pl.graniec.coralreef.network.exceptions.NetworkException;
 import pl.graniec.coralreef.network.server.ConnectionListener;
+import pl.graniec.coralreef.network.server.RemoteClient;
 import pl.graniec.coralreef.network.server.Server;
 
 /**
@@ -105,6 +106,22 @@ public class Service implements Server {
 	 */
 	public int getId() {
 		return id;
+	}
+
+	/**
+	 * @param client
+	 * @param reason
+	 * @param reasonString
+	 */
+	void notifyClientDisconnected(RemoteClient client, int reason, String reasonString) {
+		
+	}
+
+	/**
+	 * @param sender
+	 */
+	void notifyClientConnected(RemoteClient sender) {
+		
 	}
 
 }

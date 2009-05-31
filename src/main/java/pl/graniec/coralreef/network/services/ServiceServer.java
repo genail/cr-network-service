@@ -34,12 +34,15 @@ import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.logging.Logger;
 
 import pl.graniec.coralreef.network.PacketListener;
 import pl.graniec.coralreef.network.exceptions.NetworkException;
 import pl.graniec.coralreef.network.server.ConnectionListener;
 import pl.graniec.coralreef.network.server.RemoteClient;
 import pl.graniec.coralreef.network.server.Server;
+import pl.graniec.coralreef.network.services.packets.ServiceJoinPacket;
+import pl.graniec.coralreef.network.services.packets.ServiceJoinResponsePacket;
 import pl.graniec.coralreef.network.services.packets.ServiceListingPacket;
 import pl.graniec.coralreef.network.services.packets.ServiceListingRequestPacket;
 import pl.graniec.coralreef.network.services.packets.ServicePacket;
@@ -63,7 +66,7 @@ public class ServiceServer {
 		/** Instance to RemoteClient object */
 		RemoteClient remoteClient;
 		/** Services that this client has joined */
-		List/*<Service>*/ services = new LinkedList();
+		private Map/*<Integer, Service>*/ services = new HashMap();
 		
 		public ClientHandler(RemoteClient remoteClient) {
 			super();
@@ -71,11 +74,13 @@ public class ServiceServer {
 		}
 		
 	}
+	
+	private static Logger logger = Logger.getLogger(ServiceServer.class.getName());
 
 	/** Server implementation */
 	private final Server serverImpl;
-	/** List of available services */
-	private List services = new LinkedList();
+	/** Map of available services */
+	private Map/*<Integer, Service>*/ services = new HashMap();
 	/** Map of client handlers */
 	private final Map/*<RemoteClient, ClientHandler>*/ clients = new HashMap();
 	
@@ -101,7 +106,13 @@ public class ServiceServer {
 		serverImpl.close();
 	}
 	
-	private void handleClientConnected(final RemoteClient client) {
+	public int getPort() {
+		return serverImpl.getPort();
+	}
+	
+	private synchronized void handleClientConnected(final RemoteClient client) {
+		clients.put(client, new ClientHandler(client));
+		
 		client.addPacketListener(new PacketListener() {
 			public void packetReceived(Object data) {
 				handlePacketReceived(client, data);
@@ -109,8 +120,24 @@ public class ServiceServer {
 		});
 	}
 	
-	private void handleClientDisconnected(RemoteClient client, int reason, String reasonString) {
+	/** When client disconnects */
+	private synchronized void handleClientDisconnected(RemoteClient client, int reason, String reasonString) {
 		
+		// let the all services know about disconnection
+		final ClientHandler handler = (ClientHandler) clients.get(client);
+		
+		if (handler == null) {
+			logger.severe("got message from client " + client + " but no handler found; this is possible a bug!");
+			return;
+		}
+		
+		Service service;
+		for (final Iterator itor = handler.services.values().iterator(); itor.hasNext();) {
+			service = (Service) itor.next();
+			service.notifyClientDisconnected(client, reason, reasonString);
+		}
+		
+		clients.remove(client);
 	}
 	
 	private void handlePacketReceived(RemoteClient sender, Object data) {
@@ -121,6 +148,65 @@ public class ServiceServer {
 		if (data instanceof ServiceListingRequestPacket) {
 			handleServiceListingRequestPacket(sender, (ServiceListingRequestPacket) data);
 		}
+		else if (data instanceof ServiceJoinPacket) {
+			handleServiceJoinPacket(sender, (ServiceJoinPacket) data);
+		}
+	}
+
+	/**
+	 * @param sender
+	 * @param packet
+	 */
+	private synchronized void handleServiceJoinPacket(RemoteClient sender, ServiceJoinPacket packet) {
+		
+		try {
+			final ClientHandler handler = (ClientHandler) clients.get(sender);
+			
+			if (handler == null) {
+				logger.severe("got message from client " + sender + " but no handler found; this is possible a bug!");
+				return;
+			}
+			
+			// join the service
+			
+			final int[] services = packet.getServices();
+			final List/*<Integer>*/ servicesJoined = new LinkedList();
+			
+			Integer serviceId;
+			Service service;
+			
+			for (int i = 0; i < services.length; ++i) {
+				
+				serviceId = Integer.valueOf(services[i]);
+				
+				if (!this.services.containsKey(serviceId)) {
+					continue;
+				}
+				
+				if (!handler.services.containsKey(serviceId)) {
+					service = (Service) this.services.get(serviceId);
+					service.notifyClientConnected(sender);
+					
+					handler.services.put(serviceId, service);
+				}
+				
+				servicesJoined.add(serviceId);
+			}
+			
+			// send a feedback
+			final int[] servicesJoinedInt = new int[servicesJoined.size()];
+			
+			int counter = 0;
+			for (final Iterator itor = servicesJoined.iterator(); itor.hasNext();) {
+				servicesJoinedInt[counter++] = ((Integer)itor.next()).intValue();
+			}
+		
+			sender.send(new ServiceJoinResponsePacket(servicesJoinedInt));
+		} catch (NotSerializableException e) {
+			// impossible
+		} catch (NetworkException e) {
+			// do nothing
+		}
 	}
 	
 	/**
@@ -128,21 +214,19 @@ public class ServiceServer {
 	 * 
 	 * @param data
 	 */
-	private void handleServiceListingRequestPacket(RemoteClient sender, ServiceListingRequestPacket data) {
+	private synchronized void handleServiceListingRequestPacket(RemoteClient sender, ServiceListingRequestPacket data) {
 		
 		try {
 			
 			int[] ids;
 			
-			synchronized (services) {
-				ids = new int[services.size()];
-				
-				Service service;
-				int counter = 0;
-				for (Iterator itor = services.iterator(); itor.hasNext(); ) {
-					service = (Service) itor.next();
-					ids[counter++] = service.getId();
-				}
+			ids = new int[services.size()];
+			
+			Service service;
+			int counter = 0;
+			for (Iterator itor = services.values().iterator(); itor.hasNext(); ) {
+				service = (Service) itor.next();
+				ids[counter++] = service.getId();
 			}
 			
 			ServicePacket packet = new ServiceListingPacket(ids);
@@ -155,10 +239,6 @@ public class ServiceServer {
 			// ignore
 		}
 	}
-	
-	public int getPort() {
-		return serverImpl.getPort();
-	}
 
 	/**
 	 * Creates a new service that is bound to this server.
@@ -168,12 +248,10 @@ public class ServiceServer {
 	 * 
 	 * @return New service (a Server implementation)
 	 */
-	public Service newService(int id) {
+	public synchronized Service newService(int id) {
 		final Service service = new Service(this, id);
 		
-		synchronized (services) {
-			services.add(service);
-		}
+		services.put(Integer.valueOf(id), service);
 		
 		return service;
 	}
