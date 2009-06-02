@@ -36,11 +36,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.logging.Logger;
 
+import pl.graniec.coralreef.network.DisconnectReason;
 import pl.graniec.coralreef.network.PacketListener;
 import pl.graniec.coralreef.network.exceptions.NetworkException;
 import pl.graniec.coralreef.network.server.ConnectionListener;
 import pl.graniec.coralreef.network.server.RemoteClient;
 import pl.graniec.coralreef.network.server.Server;
+import pl.graniec.coralreef.network.services.packets.ServiceDataPacket;
 import pl.graniec.coralreef.network.services.packets.ServiceJoinPacket;
 import pl.graniec.coralreef.network.services.packets.ServiceJoinResponsePacket;
 import pl.graniec.coralreef.network.services.packets.ServiceListingPacket;
@@ -145,12 +147,34 @@ public class ServiceServer {
 			return;
 		}
 		
-		if (data instanceof ServiceListingRequestPacket) {
+		if (data instanceof ServiceDataPacket) {
+			handleServiceDataPacet(sender, (ServiceDataPacket) data);
+		}
+		else if (data instanceof ServiceListingRequestPacket) {
 			handleServiceListingRequestPacket(sender, (ServiceListingRequestPacket) data);
 		}
 		else if (data instanceof ServiceJoinPacket) {
 			handleServiceJoinPacket(sender, (ServiceJoinPacket) data);
 		}
+	}
+
+	/**
+	 * @param sender
+	 * @param packet
+	 */
+	private synchronized void handleServiceDataPacet(RemoteClient sender, ServiceDataPacket packet) {
+		// sender must belong to this service
+		final Integer serviceId = Integer.valueOf(packet.getServiceId());
+		final ClientHandler clientHandler = (ClientHandler) clients.get(sender);
+		
+		if (!clientHandler.services.containsKey(serviceId)) {
+			logger.warning("got packet from " + sender + " to service " + serviceId + ", but he doesn't belong to that service");
+			return;
+		}
+		
+		// just put the packet throu
+		final Service targetService = (Service) clientHandler.services.get(serviceId);
+		targetService.notifyPacketReceived(sender, packet.getData());
 	}
 
 	/**
@@ -207,6 +231,47 @@ public class ServiceServer {
 		} catch (NetworkException e) {
 			// do nothing
 		}
+	}
+	
+	/**
+	 * Tells if <code>client</code> is currently connected to service
+	 * <code>serviceId</code> or not.
+	 * <p>
+	 * When client is not found in clients lists then it's treated
+	 * like not connected.
+	 * 
+	 * @param client ServiceServer RemoteClient instance.
+	 * @param serviceId Id of service.
+	 * 
+	 * @return <code>true</code> if client is connected to specified service.
+	 */
+	synchronized boolean isClientConnected(RemoteClient client, int serviceId) {
+		final ClientHandler handler = (ClientHandler) clients.get(client);
+		
+		if (handler == null) {
+			return false;
+		}
+		
+		return handler.services.containsKey(Integer.valueOf(serviceId));
+	}
+	
+	synchronized void disconnectClientFromService(RemoteClient client, int serviceId) {
+		final ClientHandler handler = (ClientHandler) clients.get(client);
+		
+		if (handler == null) {
+			return;
+		}
+		
+		final Service service = (Service) handler.services.get(Integer.valueOf(serviceId));
+		
+		if (service == null) {
+			return;
+		}
+		
+		handler.services.remove(Integer.valueOf(serviceId));
+		service.notifyClientDisconnected(client, DisconnectReason.UserAction, "user action");
+		
+		// FIXME: send disconnection information to ServiceClient
 	}
 	
 	/**

@@ -28,8 +28,12 @@
  */
 package pl.graniec.coralreef.network.services;
 
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
+import java.util.Map;
 import java.util.Set;
+import java.util.logging.Logger;
 
 import pl.graniec.coralreef.network.exceptions.NetworkException;
 import pl.graniec.coralreef.network.server.ConnectionListener;
@@ -42,6 +46,8 @@ import pl.graniec.coralreef.network.server.Server;
  */
 public class Service implements Server {
 
+	private static final Logger logger = Logger.getLogger(Service.class.getName());
+	
 	/** Parent server */
 	private final ServiceServer parent;
 	
@@ -49,6 +55,9 @@ public class Service implements Server {
 	private final int id;
 	/** Connection listeners */
 	private final Set connectionListeners = new HashSet();
+	
+	/** Connected remote clients */
+	private final Map/*<RemoteClient, ServiceRemoteClient>*/ remoteClients = new HashMap();
 	
 	Service(ServiceServer parent, int id) {
 		this.parent = parent;
@@ -115,13 +124,68 @@ public class Service implements Server {
 	 */
 	void notifyClientDisconnected(RemoteClient client, int reason, String reasonString) {
 		
+		ServiceRemoteClient serviceRemoteClient;
+		
+		synchronized (remoteClients) {
+			serviceRemoteClient = (ServiceRemoteClient) remoteClients.remove(client);
+		}
+		
+		if (serviceRemoteClient == null) {
+			logger.severe("disconnected client " + client + " not on service " + this + " clients list");
+			return;
+		}
+		
+		synchronized (connectionListeners) {
+			
+			ConnectionListener listener;
+			for (final Iterator itor = connectionListeners.iterator(); itor.hasNext();) {
+				listener = (ConnectionListener) itor.next();
+				listener.clientDisconnected(serviceRemoteClient, reason, reasonString);
+			}
+			
+		}
+		
+	}
+
+	/**
+	 * @param client
+	 */
+	void notifyClientConnected(RemoteClient client) {
+		
+		ServiceRemoteClient serviceRemoteClient = new ServiceRemoteClient(parent, id, client);
+		
+		synchronized (remoteClients) {
+			remoteClients.put(client, serviceRemoteClient);
+		}
+		
+		synchronized (connectionListeners) {
+			
+			ConnectionListener listener;
+			for (final Iterator itor = connectionListeners.iterator(); itor.hasNext();) {
+				listener = (ConnectionListener) itor.next();
+				listener.clientConnected(serviceRemoteClient);
+			}
+			
+		}
 	}
 
 	/**
 	 * @param sender
+	 * @param data
 	 */
-	void notifyClientConnected(RemoteClient sender) {
+	public void notifyPacketReceived(RemoteClient sender, Object data) {
+		ServiceRemoteClient serviceRemoteClient;
 		
+		synchronized (remoteClients) {
+			serviceRemoteClient = (ServiceRemoteClient) remoteClients.get(sender);
+		}
+		
+		if (serviceRemoteClient == null) {
+			logger.severe("client " + sender + " not on service " + this + " clients list");
+			return;
+		}
+		
+		serviceRemoteClient.notifyPacketReceived(data);
 	}
 
 }
